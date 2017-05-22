@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import sys
 import csv
 
@@ -12,67 +13,74 @@ maleguest_endtag = "<br>"
 femaleguest_tags = ["<span>femaleguest1:</span> ", "<span>femaleguest2:</span> "]
 femaleguest_endtags = ["<br>", "<br>"]
 
-# This function searches for the names of the participants in the html text
-def getParticipants(text, tag, endTag):
-    participants = []
-    index = text.find(tag)
+def getAllParticipants(text):
+    guests = {}
+    index = text.find(primaryguest_tag)
     while index < len(text) and index != -1:
-        # get the location of the endtag
-        index_end = text.find(endTag, index+len(tag))
+        tag = primaryguest_tag
+        # found primary, now search for male and female guests
+        index_end = text.find(primaryguest_endtag, index+len(tag))
         if index_end != index+len(tag):
-            participants.append(text[index+len(tag):index_end])
-        index = text.find(tag, index+1)
+            prim_name = reverseName(text[index+len(tag):index_end])
 
-    return participants
+        # searching for next tag
+        male_name = searchNextName(text, index, maleguest_tag, maleguest_endtag)
+
+        female_names = []
+        for i in range(0, len(femaleguest_tags)):
+            female_names.append(searchNextName(text, index, femaleguest_tags[i],
+                                               femaleguest_endtags[i]))
+
+        # set new index
+        index = text.find(primaryguest_tag, index+len(primaryguest_tag))
+        guests[prim_name] = {'male': male_name, 'female': female_names}
+
+    return guests
+
+def searchNextName(text, index, tag, endTag):
+    index = text.find(tag, index)
+    index_end = text.find(endTag, index+len(tag))
+    if index != -1 and index_end != -1:
+        return reverseName(text[index+len(tag):index_end])
+    return ""
 
 # This function tries to split names in forename and surname
 #
 # It simply searches for the last space in the string and splits the string
 # at that position.
 def splitNames(name):
-    index = name.rfind(" ")
+    index = name.rstrip().rfind(" ")
     if index != -1:
         return (name[0:index], name[index+1:])
     else:                       # assume only forename
         return (name, "")
 
+def reverseName(name):
+    if name == "":
+        return ""
+    split = splitNames(name)
+    return "{}, {}".format(split[1].title(), split[0].title())
+
 # open file
-with open(filename, 'r') as html:
-    text = html.read();
+with open(filename, encoding='utf-8') as html:
+    text = html.read()
 
-participants_primary = getParticipants(text, primaryguest_tag, primaryguest_endtag)
-# filter unconrfirmed
-for i in range(0, len(participants_primary)):
-    index = participants_primary[i].find(" <span>(unconfirmed)</span>")
-    if index != -1:
-        participants_primary[i] = participants_primary[i][0:index]
+# remove all unconfirmed
+text = text.replace(u' <span>(unconfirmed)</span>', '')
 
-participants_male = getParticipants(text, maleguest_tag, maleguest_endtag)
+guests = getAllParticipants(text)
 
-participants_female = []
-for i in range(0, len(femaleguest_tags)):
-    participants_female.extend(getParticipants(text, femaleguest_tags[i],
-                                               femaleguest_endtags[i]))
+with open("complete_list.txt", "w", encoding='utf-8') as complete_list, \
+    open("related_list.txt", "w", encoding='utf-8') as related_list:
 
-participants = participants_primary
-participants.extend(participants_male)
-participants.extend(participants_female)
+    guests_all = []
+    for k in sorted(guests.keys()):
+        related_list.write("{}:\n\tmaleguest: {}".format(k, guests[k]['male']))
+        related_list.write("\n\tfemaleguest1: {}\n\tfemaleguest2: {}\n".format(guests[k]['female'][0], guests[k]['female'][1]))
+        guests_all.extend([k, guests[k]['male'], guests[k]['female'][0], guests[k]['female'][1]])
 
-part_female_split = [splitNames(name) for name in participants_female]
-part_male_split = [splitNames(name) for name in participants_male]
-part_primary_split = [splitNames(name) for name in participants_primary]
-part_split = [splitNames(name) for name in participants]
-
-# sort for lastnames
-part_female_split.sort(key=lambda t: t[1])
-part_male_split.sort(key=lambda t: t[1])
-part_primary_split.sort(key=lambda t: t[1])
-part_split.sort(key=lambda t: t[1])
-
-#print(part_split)
-
-with open("complete_list.csv", "w") as csvfile:
-    writer = csv.writer(csvfile, delimiter=',', quotechar='|',
-                           quoting=csv.QUOTE_MINIMAL)
-    for name in part_split:
-        writer.writerow(name)
+    # strip empty names
+    guests_all = [x for x in guests_all if x]
+    guests_all.sort()
+    for name in guests_all:
+        complete_list.write("{}\n".format(name))

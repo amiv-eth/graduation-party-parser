@@ -9,3 +9,5 @@ participants list, right click and select "save this page" or "save as...". Then
 select html only and save it. Then point the parse script to the downloaded html
 file as follows:
 `./parse.py file.html`
+
+The script creates two new files `related_list.txt` and `complete_list.txt`. 
